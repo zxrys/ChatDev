@@ -491,3 +491,220 @@ class WorkflowLogger:
         """Return the elapsed time recorded by the timer key."""
         self.__init_timers__()
         return self._timers.get(timer_key)
+
+
+class PrefixWorkflowLogger:
+    """Logger proxy that prefixes node identifiers before delegating."""
+
+    def __init__(self, base_logger: WorkflowLogger, prefix: str) -> None:
+        self.base_logger = base_logger
+        self.prefix = prefix or ""
+
+    def _prefix_node_id(self, node_id: Optional[str]) -> Optional[str]:
+        if not node_id:
+            return node_id
+        return f"{self.prefix}{node_id}"
+
+    def _prefix_timer_key(self, timer_key: Optional[str]) -> Optional[str]:
+        if not timer_key:
+            return timer_key
+        for key_prefix in ("model_", "agent_", "human_", "tool_", "thinking_", "memory_"):
+            if timer_key.startswith(key_prefix):
+                rest = timer_key[len(key_prefix):]
+                return f"{key_prefix}{self._prefix_node_id(rest)}"
+        return self._prefix_node_id(timer_key)
+
+    def _subgraph_id(self) -> str:
+        return self.prefix[:-1] if self.prefix.endswith("/") else self.prefix
+
+    def add_log(self, level: LogLevel, message: str = None, node_id: str = None,
+                event_type: EventType = None, details: Dict[str, Any] = None,
+                duration: float = None) -> LogEntry | None:
+        return self.base_logger.add_log(
+            level,
+            message,
+            self._prefix_node_id(node_id),
+            event_type,
+            details,
+            duration,
+        )
+
+    def debug(self, message: str, node_id: str = None, event_type: EventType = None,
+              details: Dict[str, Any] = None, duration: float | None = None) -> None:
+        self.base_logger.debug(message, self._prefix_node_id(node_id), event_type, details, duration)
+
+    def info(self, message: str, node_id: str = None, event_type: EventType = None,
+             details: Dict[str, Any] = None, duration: float | None = None) -> None:
+        self.base_logger.info(message, self._prefix_node_id(node_id), event_type, details, duration)
+
+    def warning(self, message: str, node_id: str = None, event_type: EventType = None,
+                details: Dict[str, Any] = None, duration: float | None = None) -> None:
+        self.base_logger.warning(message, self._prefix_node_id(node_id), event_type, details, duration)
+
+    def error(self, message: str, node_id: str = None, event_type: EventType = None,
+              details: Dict[str, Any] = None, duration: float | None = None) -> None:
+        self.base_logger.error(message, self._prefix_node_id(node_id), event_type, details, duration)
+
+    def critical(self, message: str, node_id: str = None, event_type: EventType = None,
+                 details: Dict[str, Any] = None) -> None:
+        self.base_logger.critical(message, self._prefix_node_id(node_id), event_type, details)
+
+    def enter_node(self, node_id: str, inputs: List[Dict[str, str]], node_type: str = None,
+                   details: Dict[str, Any] = None) -> None:
+        self.base_logger.enter_node(self._prefix_node_id(node_id), inputs, node_type, details)
+
+    def exit_node(self, node_id: str, output: str, duration: float = None,
+                  output_size: int = None, details: Dict[str, Any] = None) -> None:
+        self.base_logger.exit_node(self._prefix_node_id(node_id), output, duration, output_size, details)
+
+    def record_edge_process(self, from_node: str, to_node: str,
+                            details: Dict[str, Any] = None) -> None:
+        self.base_logger.record_edge_process(
+            self._prefix_node_id(from_node),
+            self._prefix_node_id(to_node),
+            details,
+        )
+
+    def record_human_interaction(self, node_id: str, input_data: str = None, output: str = None,
+                                 duration: float = None, details: Dict[str, Any] = None) -> None:
+        self.base_logger.record_human_interaction(
+            self._prefix_node_id(node_id),
+            input_data,
+            output,
+            duration,
+            details,
+        )
+
+    def record_model_call(self, node_id: str, model_name: str,
+                          input_data: Any = None, output: Any = None,
+                          duration: float = None, details: Dict[str, Any] = None,
+                          stage: CallStage = CallStage.AFTER) -> None:
+        self.base_logger.record_model_call(
+            self._prefix_node_id(node_id),
+            model_name,
+            input_data,
+            output,
+            duration,
+            details,
+            stage,
+        )
+
+    def record_tool_call(self, node_id: str, tool_name: str,
+                         tool_result: Any = None, duration: float = None,
+                         success: bool | None = True, details: Dict[str, Any] = None,
+                         stage: CallStage = CallStage.AFTER) -> None:
+        self.base_logger.record_tool_call(
+            self._prefix_node_id(node_id),
+            tool_name,
+            tool_result,
+            duration,
+            success,
+            details,
+            stage,
+        )
+
+    def record_thinking_process(self, node_id: str, thinking_mode: str, thinking_result: str,
+                                stage: str, duration: float = None,
+                                details: Dict[str, Any] = None) -> None:
+        self.base_logger.record_thinking_process(
+            self._prefix_node_id(node_id),
+            thinking_mode,
+            thinking_result,
+            stage,
+            duration,
+            details,
+        )
+
+    def record_memory_operation(self, node_id: str, retrieved_memory: Any, operation_type: str,
+                                stage: str, duration: float = None,
+                                details: Dict[str, Any] = None) -> None:
+        self.base_logger.record_memory_operation(
+            self._prefix_node_id(node_id),
+            retrieved_memory,
+            operation_type,
+            stage,
+            duration,
+            details,
+        )
+
+    def record_workflow_start(self, workflow_config: Dict[str, Any] = None) -> None:
+        details = {
+            "subgraph_id": self._subgraph_id(),
+            "node_count": workflow_config.get("node_count") if workflow_config else None,
+            "edge_count": workflow_config.get("edge_count") if workflow_config else None,
+        }
+        self.base_logger.info(
+            "Subgraph execution started",
+            details=details,
+        )
+
+    def record_workflow_end(self, success: bool = True,
+                            duration: float = None, details: Dict[str, Any] = None) -> None:
+        end_details = {
+            "subgraph_id": self._subgraph_id(),
+            "success": success,
+            **(details or {}),
+        }
+        level = LogLevel.INFO if success else LogLevel.ERROR
+        self.base_logger.add_log(
+            level,
+            "Subgraph execution completed",
+            details=end_details,
+            duration=duration,
+        )
+
+    @contextmanager
+    def node_timer(self, node_id: str):
+        with self.base_logger.node_timer(self._prefix_node_id(node_id)):
+            yield
+
+    @contextmanager
+    def model_timer(self, node_id: str):
+        with self.base_logger.model_timer(self._prefix_node_id(node_id)):
+            yield
+
+    @contextmanager
+    def agent_timer(self, node_id: str):
+        with self.base_logger.agent_timer(self._prefix_node_id(node_id)):
+            yield
+
+    @contextmanager
+    def human_timer(self, node_id: str):
+        with self.base_logger.human_timer(self._prefix_node_id(node_id)):
+            yield
+
+    @contextmanager
+    def tool_timer(self, node_id: str, tool_name: str):
+        with self.base_logger.tool_timer(self._prefix_node_id(node_id), tool_name):
+            yield
+
+    @contextmanager
+    def thinking_timer(self, node_id: str, stage: str):
+        with self.base_logger.thinking_timer(self._prefix_node_id(node_id), stage):
+            yield
+
+    @contextmanager
+    def memory_timer(self, node_id: str, operation_type: str, stage: str):
+        with self.base_logger.memory_timer(self._prefix_node_id(node_id), operation_type, stage):
+            yield
+
+    def get_timer(self, timer_key: str) -> Optional[float]:
+        return self.base_logger.get_timer(self._prefix_timer_key(timer_key))
+
+    def get_execution_summary(self) -> Dict[str, Any]:
+        return self.base_logger.get_execution_summary()
+
+    def get_logs(self) -> list:
+        return self.base_logger.get_logs()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.base_logger.to_dict()
+
+    def to_json(self) -> str:
+        return self.base_logger.to_json()
+
+    def save_to_file(self, filepath: str) -> None:
+        self.base_logger.save_to_file(filepath)
+
+    def __getattr__(self, item):
+        return getattr(self.base_logger, item)

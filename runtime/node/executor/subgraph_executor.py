@@ -10,6 +10,8 @@ from entity.configs import Node
 from entity.configs.node.subgraph import SubgraphConfig
 from runtime.node.executor.base import NodeExecutor
 from entity.messages import Message, MessageRole
+from utils.human_prompt import resolve_prompt_channel
+from utils.logger import PrefixWorkflowLogger
 
 
 class SubgraphNodeExecutor(NodeExecutor):
@@ -73,8 +75,34 @@ class SubgraphNodeExecutor(NodeExecutor):
         
         # Execute the subgraph (requires importing ``GraphExecutor``)
         from workflow.graph import GraphExecutor
-        
-        executor = GraphExecutor.execute_graph(subgraph, task_prompt=task_payload)
+
+        prefix = f"{node.id}/"
+        base_logger = self.log_manager.get_logger()
+        subgraph_logger = PrefixWorkflowLogger(base_logger, prefix) if base_logger else None
+        workspace_hook_factory = None
+        prompt_channel = resolve_prompt_channel(self.context.workspace_hook)
+        if prompt_channel is not None:
+            class _SubgraphPromptHook:
+                def __init__(self, channel):
+                    self.prompt_channel = channel
+
+                def get_prompt_channel(self):
+                    return self.prompt_channel
+
+                def before_node(self, node, workspace):
+                    return None
+
+                def after_node(self, node, workspace, *, success: bool):
+                    return None
+
+            workspace_hook_factory = lambda _runtime_ctx: _SubgraphPromptHook(prompt_channel)
+
+        executor = GraphExecutor.execute_graph(
+            subgraph,
+            task_prompt=task_payload,
+            logger=subgraph_logger,
+            workspace_hook_factory=workspace_hook_factory,
+        )
         result_messages = executor.get_final_output_messages()
         
         final_results = []

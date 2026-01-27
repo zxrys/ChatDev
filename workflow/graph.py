@@ -58,6 +58,7 @@ class GraphExecutor:
         graph: GraphContext,
         *,
         session_id: Optional[str] = None,
+        logger: Optional[WorkflowLogger] = None,
         workspace_hook_factory: Optional[Callable[[RuntimeContext], Any]] = None,
         cancel_event: Optional[threading.Event] = None,
     ) -> None:
@@ -65,7 +66,7 @@ class GraphExecutor:
         self.majority_result = None
         self.graph: GraphContext = graph
         self.outputs = {}
-        self.logger = self._create_logger()
+        self.logger = logger or self._create_logger()
         self._cancel_event = cancel_event or threading.Event()
         self._cancel_reason: Optional[str] = None
         runtime = RuntimeBuilder(graph).build(logger=self.logger, session_id=session_id)
@@ -128,10 +129,17 @@ class GraphExecutor:
         graph: GraphContext,
         task_prompt: Any,
         *,
+        logger: Optional[WorkflowLogger] = None,
+        workspace_hook_factory: Optional[Callable[[RuntimeContext], Any]] = None,
         cancel_event: Optional[threading.Event] = None,
     ) -> "GraphExecutor":
         """Convenience method to execute a graph with a task prompt."""
-        executor = cls(graph, cancel_event=cancel_event)
+        executor = cls(
+            graph,
+            logger=logger,
+            workspace_hook_factory=workspace_hook_factory,
+            cancel_event=cancel_event,
+        )
         executor._execute(task_prompt)
         return executor
 
