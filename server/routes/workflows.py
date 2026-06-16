@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from typing import Any
 
+import yaml
+
 from server.models import (
     WorkflowCopyRequest,
     WorkflowRenameRequest,
@@ -25,6 +27,24 @@ from utils.exceptions import (
 from utils.structured_logger import get_server_logger, LogType
 
 router = APIRouter()
+
+
+def _extract_workflow_description(file_path) -> str:
+    try:
+        raw_content = file_path.read_text(encoding="utf-8")
+        yaml_content = yaml.safe_load(raw_content) or {}
+    except Exception:
+        return ""
+
+    if not isinstance(yaml_content, dict):
+        return ""
+
+    graph = yaml_content.get("graph") or {}
+    if not isinstance(graph, dict):
+        return ""
+
+    description = graph.get("description") or ""
+    return description if isinstance(description, str) else ""
 
 
 def _persist_workflow_from_content(
@@ -62,10 +82,23 @@ def _persist_workflow_from_content(
 
 
 @router.get("/api/workflows")
-async def list_workflows():
+async def list_workflows(include_desc: bool = False):
     if not YAML_DIR.exists():
         return {"workflows": []}
-    return {"workflows": [file.name for file in YAML_DIR.glob("*.yaml")]}
+
+    files = sorted(YAML_DIR.glob("*.yaml"), key=lambda file: file.name.lower())
+    if not include_desc:
+        return {"workflows": [file.name for file in files]}
+
+    return {
+        "workflows": [
+            {
+                "name": file.name,
+                "description": _extract_workflow_description(file) or "No description",
+            }
+            for file in files
+        ]
+    }
 
 
 @router.get("/api/workflows/{filename}/args")
@@ -358,4 +391,3 @@ async def get_workflow_raw_content(filename: str):
         logger = get_server_logger()
         logger.log_exception(exc, f"Unexpected error retrieving workflow: {filename}")
         raise WorkflowExecutionError(f"Failed to retrieve workflow: {exc}")
-

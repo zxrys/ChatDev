@@ -1,6 +1,6 @@
 """Abstract base classes for agent providers."""
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from entity.configs import AgentConfig
 from entity.messages import Message
@@ -85,8 +85,11 @@ class ProviderRegistry:
     def register(
         cls,
         name: str,
-        provider_class: type,
+        provider_class: type | None = None,
         *,
+        loader: Callable[[], type] | None = None,
+        module_path: str | None = None,
+        attr_name: str | None = None,
         label: str | None = None,
         summary: str | None = None,
     ) -> None:
@@ -96,7 +99,14 @@ class ProviderRegistry:
         }
         # Drop None values so schema consumers don't need to filter.
         metadata = {key: value for key, value in metadata.items() if value is not None}
-        _provider_registry.register(name, target=provider_class, metadata=metadata)
+        _provider_registry.register(
+            name,
+            target=provider_class,
+            loader=loader,
+            module_path=module_path,
+            attr_name=attr_name,
+            metadata=metadata,
+        )
         register_model_provider_schema(name, label=label, summary=summary)
 
     @classmethod

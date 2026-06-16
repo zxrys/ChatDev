@@ -186,27 +186,32 @@ export async function postYamlCopy(filename, newFilename) {
 // Load the YAML file list from the API with names and descriptions
 export async function fetchWorkflowsWithDesc() {
   try {
-    const response = await fetch(apiUrl('/api/workflows'))
+    const response = await fetch(apiUrl('/api/workflows?include_desc=true'))
     if (!response.ok) {
       throw new Error(`/api/workflows fetch error, status: ${response.status}`)
     }
     const data = await response.json()
+    const workflows = Array.isArray(data.workflows) ? data.workflows : []
 
-    // Fetch YAML descriptions by filename
-    const filesWithDesc = await Promise.all(
-      data.workflows.map(async (filename) => {
-        try {
-          const response = await fetch(apiUrl(`/api/workflows/${encodeURIComponent(filename)}/desc`))
-          const fileData = await response.json()
-          return {
-            name: filename,
-            description: fileData.description || 'No description'
-          }
-        } catch {
-          return { name: filename, description: 'No description' }
-        }
-      })
-    )
+    const filesWithDesc = workflows.every((entry) => typeof entry === 'object' && entry !== null)
+      ? workflows.map((entry) => ({
+          name: entry.name,
+          description: entry.description || 'No description'
+        }))
+      : await Promise.all(
+          workflows.map(async (filename) => {
+            try {
+              const response = await fetch(apiUrl(`/api/workflows/${encodeURIComponent(filename)}/desc`))
+              const fileData = await response.json()
+              return {
+                name: filename,
+                description: fileData.description || 'No description'
+              }
+            } catch {
+              return { name: filename, description: 'No description' }
+            }
+          })
+        )
 
     return {
       success: true,

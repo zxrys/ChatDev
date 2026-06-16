@@ -12,9 +12,6 @@ from schema_registry import iter_node_schemas
 from utils.io_utils import read_yaml
 
 
-ensure_schema_registry_populated()
-
-
 class DesignError(RuntimeError):
     """Raised when a workflow design cannot be loaded or validated."""
 
@@ -56,6 +53,7 @@ def load_config(
     vars_override: Optional[Dict[str, Any]] = None,
 ) -> DesignConfig:
     """Load, validate, and sanity-check a workflow file."""
+    ensure_schema_registry_populated()
 
     try:
         raw_data = read_yaml(config_path)
@@ -97,6 +95,8 @@ def load_config(
 
 
 def check_config(yaml_content: Any) -> str:
+    ensure_schema_registry_populated()
+
     if not isinstance(yaml_content, dict):
         return "YAML root must be a mapping"
 

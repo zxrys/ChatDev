@@ -4,7 +4,11 @@
 
 .PHONY: dev
 dev: ## Run both backend and frontend development servers
-	@$(MAKE) -j2 server client
+	@echo "Starting backend and frontend development servers..."
+	@uv run python server_main.py --port 6400 & \
+	server_pid=$$!; \
+	trap 'kill $$server_pid 2>/dev/null || true' INT TERM EXIT; \
+	cd frontend && npx cross-env VITE_API_BASE_URL=http://localhost:6400 npm run dev
 
 
 .PHONY: server

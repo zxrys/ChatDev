@@ -2,12 +2,6 @@ import argparse
 import logging
 from pathlib import Path
 
-from runtime.bootstrap.schema import ensure_schema_registry_populated
-from server.app import app
-
-
-ensure_schema_registry_populated()
-
 
 # Directories containing the server's Python sources. When --reload is
 # enabled, only these are watched so that agent-generated files under
@@ -120,8 +114,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main():
     import uvicorn
+    from runtime.bootstrap.schema import ensure_schema_registry_populated
 
     args = build_parser().parse_args()
+    ensure_schema_registry_populated()
 
     # Configure structured logging
     import os
